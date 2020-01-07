@@ -173,7 +173,8 @@ function searchBannerClassScheduleData(semester, year, term_code, subject_code_a
   }
 
   var referer_url = 'https://selfservice.uncc.edu/pls/BANPROD/bwckctlg.p_disp_cat_term_date';
-  if (term_code % 60 == 0) { // detect "Summer (View Only)" requests which need a different header 
+  var last2digits = term_code.slice(-2);
+  if (last2digits == '60') { // detect "Summer (View Only)" requests which need a different header 
     referer_url = 'https://selfservice.uncc.edu/pls/BANPROD/bwckgens.p_proc_term_date';
   }
 
