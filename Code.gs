@@ -103,7 +103,7 @@ function pullBannerClassScheduleData() {
   for (var search_idx = 0; search_idx < searches_to_execute.length; search_idx++) {
     var term_code = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_YRSEMCODE];
     var dept_arr = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_DEPTS].replace(/\s/g, "").split(',');
-    var subject_code_array = ['dummy'].concat(dept_arr);
+    var subject_code_array = ['dummy','ENGR'].concat(dept_arr);
     var semester = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_SEMESTER];
     var year = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_YEAR];
     var destination_sheet_name = dept_arr + ' ' + semester + ' ' + year;
@@ -119,7 +119,7 @@ function pullBannerClassScheduleData() {
         filterType = filterCoursesCEGR;
         break;
       default:
-        filterType = filterCoursesDefault;
+        // code block
     }
     searchBannerClassScheduleData(semester, year, term_code, subject_code_array, destination_sheet_name, filterType);
   }
@@ -171,10 +171,16 @@ function searchBannerClassScheduleData(semester, year, term_code, subject_code_a
     'end_mi': '0',
     'end_ap': 'a'
   }
+
+  var referer_url = 'https://selfservice.uncc.edu/pls/BANPROD/bwckctlg.p_disp_cat_term_date';
+  if (term_code % 60 == 0) { // detect "Summer (View Only)" requests which need a different header 
+    referer_url = 'https://selfservice.uncc.edu/pls/BANPROD/bwckgens.p_proc_term_date';
+  }
+
   var headers = { 
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
     'Origin': 'https://selfservice.uncc.edu',
-    'Referer': 'https://selfservice.uncc.edu/pls/BANPROD/bwckctlg.p_disp_cat_term_date'
+    'Referer': referer_url
   }          
   var query = makeURLEncodedStringWithArrays(courseListFormData);
   var courseListFormOptions = {
@@ -184,7 +190,7 @@ function searchBannerClassScheduleData(semester, year, term_code, subject_code_a
     'payload' : query,
     'followRedirects' : true,
     'muteHttpExceptions' : true    
-  };  
+  };
   var response = UrlFetchApp.fetch(bannerCourseList, courseListFormOptions);
   var webpage_txt = response.getContentText();
   
@@ -567,4 +573,3 @@ function pullBannerCourseCatalogSearchData() {
    Logger.log(response2.getContentText());
    Utilities.sleep(1);// pause in the loop for 200 milliseconds
 }
-
