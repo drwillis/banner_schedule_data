@@ -103,7 +103,7 @@ function pullBannerClassScheduleData() {
   for (var search_idx = 0; search_idx < searches_to_execute.length; search_idx++) {
     var term_code = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_YRSEMCODE];
     var dept_arr = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_DEPTS].replace(/\s/g, "").split(',');
-    var subject_code_array = ['dummy','ENGR'].concat(dept_arr);
+    var subject_code_array = ['dummy'].concat(dept_arr);
     var semester = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_SEMESTER];
     var year = search_config_data[searches_to_execute[search_idx]][CONFIG_SHEET_COLUMN_YEAR];
     var destination_sheet_name = dept_arr + ' ' + semester + ' ' + year;
@@ -119,7 +119,7 @@ function pullBannerClassScheduleData() {
         filterType = filterCoursesCEGR;
         break;
       default:
-        // code block
+        filterType = filterCoursesDefault;
     }
     searchBannerClassScheduleData(semester, year, term_code, subject_code_array, destination_sheet_name, filterType);
   }
