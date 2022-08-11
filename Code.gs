@@ -1,7 +1,7 @@
 // 
 // This file is part of the UNCC ECE Scheduling Software and distributed 
 // as a Google script embedded as part of a Google Sheets Spreadsheet
-// Copyright (c) 2019 Andrew Willis, All rights reserved.
+// Copyright (c) 2019,2020 Andrew Willis, All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions
@@ -26,8 +26,9 @@
 //
 // The ECE Course Monitoring
 // Andrew Willis
-// October 28, 2019 v1.0
-// November 8, 2019 v2.0
+// October  28, 2019 v1.0
+// November  8, 2019 v2.0
+// September 1, 2020 v3.0 added HTML parser
 
 // HARD-CODED CONSTANTS
 var SHEET_FIRST_DATA_ROW = 3;    
@@ -66,11 +67,7 @@ var CONFIG_SHEET_COLUMN_YEAR        = 3;
 var CONFIG_SHEET_COLUMN_YRSEMCODE   = 4;
 
 var MAX_COLUMNS = 20;
-
-var SEMESTER = 'Spring'
-var YEAR = '2020';
-var SCHEDULE_MANAGERS = ['Jim Conrad','Andrew Willis'];
-var SCHEDULE_MANAGERS_EMAILS = ['jmconrad@uncc.edu','arwillis@uncc.edu'];
+var MAX_COURSES = 1500;
 
 // Create google sheet menu items
 function onOpen() {
@@ -275,23 +272,75 @@ function searchBannerClassScheduleData(semester, year, term_code, subject_code_a
   for (var course_idx = 0; course_idx < banner_crn_arr.length; course_idx++) {
     courseQueryURL = bannerSeatQueryURL + '?' + term_param + '&' + banner_crn_arr[course_idx];
     var row=[];
+    var seat_html_response_obj = UrlFetchApp.fetch(courseQueryURL, courseSeatListFormOptions)
+    var responseCode = seat_html_response_obj.getResponseCode();
+    if (responseCode != 200) {
+      throw Error( "URL fetch for URL " + courseQueryURL + " failed. Exiting." );
+      return;
+    }    
+    var seat_html_response = seat_html_response_obj.getContentText();
+    var foundCourseTable = false;
+    var foundSeatsTable = false;
+    var foundSeatValue = false;
+    var course_attrs = undefined;
+    var courseSeatList = [];
+    var accumulatedText = "";
+    var htmlparser = htmlparser2_init();
+    var parser = new htmlparser.Parser({
+      onopentag: function(tagname, attribs){
+        if(tagname === "div"){
+          //Logger.log("found div attribs = " + JSON.stringify(attribs));
+        } else if(tagname === "table"){
+          //Logger.log("found table attribs = " + JSON.stringify(attribs));
+          if (attribs['summary'] == "This table is used to present the detailed class information.") {
+            foundCourseTable = true;
+          } else if (attribs['summary'] == "This layout table is used to present the seating numbers.") {
+            foundSeatsTable = true;
+          }
+        } else if(tagname === "td") {
+          //Logger.log("found td attribs = " + JSON.stringify(attribs));
+          if (foundSeatsTable && attribs['class'] == "dddefault") {
+            foundSeatValue = true;
+          }
+        }
+      },
+      ontext: function(text){
+        var trimmed_text = text.trim().replace(/(\r\n|\r|\n)/gm,"");
+        //Logger.log("-->" + "\"" + trimmed_text + "\"");
+        //trimmed_text = text.replace(/\sn/g, "");
+        if (foundCourseTable && trimmed_text.length > 0) {          
+          accumulatedText = accumulatedText + " " + trimmed_text;
+          var test_course_attrs = accumulatedText.split(/ - /);  // title, crn, dept code & number, section
+          if (test_course_attrs.length >= 4) {
+            test_course_attrs[0] = test_course_attrs[0].replace(/Detailed Class Information/,"")
+            //Logger.log("--> accumulatedText = " + accumulatedText);
+            //Logger.log("-->" + "\"" + JSON.stringify(test_course_attrs) + "\"");
+            course_attrs = test_course_attrs;
+            foundCourseTable = false;
+            accumulatedText = "";
+          }
+        } else if (foundSeatsTable && foundSeatValue && trimmed_text.length > 0) {
+          courseSeatList.push(parseInt(trimmed_text, 10));
+          foundSeatValue = false;
+        }
+      },
+      onclosetag: function(tagname){
+        if(tagname === "div"){
+          //Logger.log("End Div");
+        } else if (tagname === "table") {
+          //Logger.log("End table");
+        } else if (tagname === "td") {
+          //Logger.log("End td");
+        }
+      }}, {decodeEntities: true});
+    //parser.write('<div dir="ltr">test 1<div><br></div></div>');
+    parser.write(seat_html_response);
+    parser.end();
     
-    var seat_html_response = UrlFetchApp.fetch(courseQueryURL, courseSeatListFormOptions);
-    var doc = Xml.parse(seat_html_response, true);
-    var bodyHtml = doc.html.body.toXmlString();
-    doc = XmlService.parse(bodyHtml);
-    var html = doc.getRootElement();    
-
-    var courselabel = getElementsByClassName(html, 'datadisplaytable');
-    var course_name_arr = getElementsByTagName(courselabel[0], 'th');   
-    var course_name = course_name_arr[0].getText();
-    var course_arr = course_name.split(/ - /); // title, crn, dept code & number, section
-    //course_name = course_name.replace(/ /g,''); // remove space characters
-    
-    var course_title = course_arr[0].trim();
-    var course_crn = parseFloat(course_arr[1].trim());
-    var course_dept_code_and_number_arr = course_arr[2].trim().split(' ');
-    var course_section = course_arr[3].trim();
+    var course_title = course_attrs[0].trim();
+    var course_crn = parseFloat(course_attrs[1].trim());
+    var course_dept_code_and_number_arr = course_attrs[2].trim().split(' ');
+    var course_section =course_attrs[3].trim();
     //if (course_dept_code_and_number_arr[1] == '1202') {
     //  var aa = 1;
     //}
@@ -312,12 +361,15 @@ function searchBannerClassScheduleData(semester, year, term_code, subject_code_a
     
     row.push('');                                             // placeholder for STATUS COLUMN;
     
-    var entries = getElementsByClassName(html, 'datadisplaytable');
-    var vals = getElementsByTagName(entries[1], 'td');    
-    for (var i = 1; i < vals.length; i++) {
-      row.push(vals[i].getText());                            // SEAT OCCUPANCY DATA
+    //var entries = getElementsByClassName(html, 'datadisplaytable');
+    //var vals = getElementsByTagName(entries[1], 'td');    
+    //for (var i = 1; i < vals.length; i++) {
+    //  row.push(vals[i].getText());                            // SEAT OCCUPANCY DATA
       //Logger.log(vals[i].getText());
-    } 
+    //} 
+    for (seatsIdx=0; seatsIdx < courseSeatList.length; seatsIdx++) {
+      row.push(courseSeatList[seatsIdx]);
+    }
     while(row.length < MAX_COLUMNS) {
       row.push(''); // MAKE THE ARRAY SQUARE Nx(MAX_COLUMNS+1) (N rows, MAX_COLUMNS+1 columns)
     }
@@ -338,8 +390,19 @@ function searchBannerClassScheduleData(semester, year, term_code, subject_code_a
 
   var colors = []
 
+  course_seats_sheet.getRange(SHEET_FIRST_DATA_ROW, 1, MAX_COURSES, MAX_COLUMNS).clearContent();
+
+
   // Write to sheets
   if (content.length > 0) {
+    // some course rows have 22 data entries and some course rows have 20 data entries
+    // the loop below makes all course data have the same number of entries
+    var fixedLength = content[0].length;
+    for (var rowIdx=0; rowIdx < content.length; rowIdx++) {
+      if (content[rowIdx].length !== fixedLength) {
+        content[rowIdx].length = fixedLength;
+      }
+    }
     course_seats_sheet.getRange(SHEET_FIRST_DATA_ROW, 1, content.length, content[0].length).setValues(content);    
     //course_seats_sheet.getRange(SHEET_FIRST_DATA_ROW, SHEET_COLUMN_STATUS + 1, content.length, 1).setBackground(colors);
   }
